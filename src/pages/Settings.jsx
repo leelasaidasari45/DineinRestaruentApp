@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Loader2, Store } from 'lucide-react';
 
 export default function Settings() {
-  const { restaurant } = useAuth();
+  const { restaurant, refreshRestaurant } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     cuisine_tags: '',
@@ -20,7 +20,9 @@ export default function Settings() {
     if (restaurant) {
       setFormData({
         name: restaurant.name || '',
-        cuisine_tags: restaurant.cuisine_tags || '',
+        cuisine_tags: Array.isArray(restaurant.cuisine_tags) 
+          ? restaurant.cuisine_tags.join(', ') 
+          : (restaurant.cuisine_tags || ''),
         address: restaurant.address || '',
         photo_url: restaurant.photo_url || '',
         avg_prep_time_minutes: restaurant.avg_prep_time_minutes || 15,
@@ -33,11 +35,14 @@ export default function Settings() {
     e.preventDefault();
     setSaving(true);
     try {
+      const parsedCuisineTags = typeof formData.cuisine_tags === 'string'
+        ? formData.cuisine_tags.split(',').map(tag => tag.trim()).filter(Boolean)
+        : [];
+
       const { error } = await supabase
         .from('restaurants')
         .update({
-          name: formData.name,
-          cuisine_tags: formData.cuisine_tags,
+          cuisine_tags: parsedCuisineTags,
           address: formData.address,
           photo_url: formData.photo_url,
           avg_prep_time_minutes: parseInt(formData.avg_prep_time_minutes),
@@ -46,6 +51,7 @@ export default function Settings() {
         .eq('id', restaurant.id);
         
       if (error) throw error;
+      if (refreshRestaurant) await refreshRestaurant();
       toast.success('Settings saved successfully');
     } catch (err) {
       toast.error('Failed to save settings: ' + err.message);

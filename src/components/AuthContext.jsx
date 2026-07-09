@@ -211,8 +211,24 @@ export const AuthProvider = ({ children }) => {
     activeUserIdRef.current = null;
   };
 
+  const refreshRestaurant = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('restaurants')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+      if (!error && data) {
+        setRestaurant(data);
+      }
+    } catch (e) {
+      console.error('Failed to refresh restaurant details:', e);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, restaurant, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, restaurant, loading, login, register, logout, refreshRestaurant }}>
       {children}
     </AuthContext.Provider>
   );
