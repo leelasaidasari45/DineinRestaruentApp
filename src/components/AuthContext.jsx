@@ -52,12 +52,13 @@ export const AuthProvider = ({ children }) => {
 
     try {
       setLoading(true);
-      // Check if this user ID exists in the restaurants table
+      // Check if this user ID exists as id OR owner_id in the restaurants table
       const { data, error } = await supabase
         .from('restaurants')
         .select('*')
-        .eq('id', authUser.id)
-        .single();
+        .or(`id.eq.${authUser.id},owner_id.eq.${authUser.id}`)
+        .limit(1)
+        .maybeSingle();
 
       if (error || !data) {
         // Check if they exist in the customers table to determine the message
@@ -103,12 +104,13 @@ export const AuthProvider = ({ children }) => {
         throw error;
       }
       
-      // Check if this user ID exists in the restaurants table
+      // Check if this user ID exists as id OR owner_id in the restaurants table
       const { data: restaurantData, error: restaurantError } = await supabase
         .from('restaurants')
         .select('*')
-        .eq('id', data.user.id)
-        .single();
+        .or(`id.eq.${data.user.id},owner_id.eq.${data.user.id}`)
+        .limit(1)
+        .maybeSingle();
         
       if (restaurantError || !restaurantData) {
         // Check if they exist in the customers table to determine message
@@ -139,10 +141,16 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, restaurantName, imageFile) => {
     isRegistering.current = true;
     try {
-      // 1. Sign up the user
+      // 1. Sign up the user, sending metadata role to satisfy the trigger
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            role: 'restaurant_owner',
+            full_name: restaurantName
+          }
+        }
       });
       
       if (error) {
@@ -182,22 +190,59 @@ export const AuthProvider = ({ children }) => {
           }
         }
 
-        // 2. Insert into restaurants table
-        const { error: insertError } = await supabase
-          .from('restaurants')
-          .insert([{
+        // 2. Explicitly store owner in public.restaurant_owners table
+        const { error: ownerError } = await supabase
+          .from('restaurant_owners')
+          .upsert({
             id: data.user.id,
             name: restaurantName,
-            photo_url: photoUrl,
-            is_open: true,
-            avg_prep_time_minutes: 15
-          }]);
-          
-        if (insertError) {
-          throw insertError;
+            email: email,
+            created_at: new Date().toISOString()
+          });
+
+        if (ownerError) {
+          console.error('Failed to insert into restaurant_owners:', ownerError.message);
+        }
+
+        // 3. Insert or update the restaurant profile
+        // The database trigger handle_new_user might have auto-seeded a restaurant.
+        // Let's check if a restaurant with owner_id = user.id exists:
+        const { data: existingRestaurant } = await supabase
+          .from('restaurants')
+          .select('id')
+          .eq('owner_id', data.user.id)
+          .maybeSingle();
+
+        if (existingRestaurant) {
+          // Update the auto-seeded restaurant with the correct name and uploaded photo
+          const { error: updateError } = await supabase
+            .from('restaurants')
+            .update({
+              name: restaurantName,
+              photo_url: photoUrl
+            })
+            .eq('id', existingRestaurant.id);
+
+          if (updateError) throw updateError;
+        } else {
+          // If no auto-seeded restaurant exists, insert a new one
+          const { error: insertError } = await supabase
+            .from('restaurants')
+            .insert([{
+              id: data.user.id,
+              owner_id: data.user.id,
+              name: restaurantName,
+              photo_url: photoUrl,
+              is_open: true,
+              avg_prep_time_minutes: 15
+            }]);
+            
+          if (insertError) {
+            throw insertError;
+          }
         }
         
-        // 3. Verification step manually now that insert is complete
+        // 4. Verification step manually now that insert/update is complete
         await verifyRestaurantRole(data.user);
       }
       return data;
@@ -217,8 +262,9 @@ export const AuthProvider = ({ children }) => {
       const { data, error } = await supabase
         .from('restaurants')
         .select('*')
-        .eq('id', user.id)
-        .single();
+        .or(`id.eq.${user.id},owner_id.eq.${user.id}`)
+        .limit(1)
+        .maybeSingle();
       if (!error && data) {
         setRestaurant(data);
       }
