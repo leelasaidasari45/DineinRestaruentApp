@@ -19,7 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { toast } from 'sonner';
 import { differenceInMinutes, parseISO, format } from 'date-fns';
-import { Clock, Phone, Loader2, ArrowRight } from 'lucide-react';
+import { Clock, Phone, Loader2, ArrowRight, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const COLUMNS = [
@@ -188,16 +188,60 @@ export default function LiveOrders() {
   const [activeId, setActiveId] = useState(null);
   const [activeTab, setActiveTab] = useState('confirmed');
 
+  // Dining Tables layout state
+  const [tables, setTables] = useState([]);
+  const [orderTablesLink, setOrderTablesLink] = useState([]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
   );
 
+  const fetchTables = async () => {
+    if (!restaurant) return;
+    try {
+      // 1. Fetch tables
+      const { data: tablesData, error: tablesError } = await supabase
+        .from('restaurant_tables')
+        .select('*')
+        .eq('restaurant_id', restaurant.id)
+        .order('table_number', { ascending: true });
+
+      if (tablesError) throw tablesError;
+
+      // 2. Fetch active order links
+      const { data: linkData, error: linkError } = await supabase
+        .from('order_tables')
+        .select(`
+          order_id,
+          table_id,
+          orders:order_id (
+            id,
+            status,
+            customers:customer_id (name, phone),
+            arrival_time
+          )
+        `);
+
+      if (linkError) throw linkError;
+
+      setTables(tablesData || []);
+      // Filter out links for completed/inactive orders
+      const activeLinks = (linkData || []).filter(link => 
+        link.orders && ['confirmed', 'preparing', 'ready'].includes(link.orders.status)
+      );
+      setOrderTablesLink(activeLinks);
+    } catch (err) {
+      console.error('Error fetching tables/links:', err);
+    }
+  };
+
   useEffect(() => {
     if (restaurant) {
       fetchOrders();
+      fetchTables();
       
-      // Setup Realtime subscription
+      // Setup Realtime subscription for orders
       const channel = supabase.channel('schema-db-changes')
         .on(
           'postgres_changes',
@@ -207,18 +251,38 @@ export default function LiveOrders() {
             table: 'orders',
           },
           (payload) => {
-            // Only process events belonging to this restaurant (safe check; RLS also filters this automatically)
             const newResId = payload.new?.restaurant_id;
             const oldResId = payload.old?.restaurant_id;
             if (newResId === restaurant.id || oldResId === restaurant.id || payload.eventType === 'DELETE') {
               handleRealtimeEvent(payload);
+              // Also refresh table-order linkages if statuses change
+              fetchTables();
             }
+          }
+        )
+        .subscribe();
+
+      // Setup Realtime subscription for restaurant tables & orders mapping
+      const tablesChannel = supabase.channel('tables-db-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'restaurant_tables' },
+          () => {
+            fetchTables();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'order_tables' },
+          () => {
+            fetchTables();
           }
         )
         .subscribe();
 
       return () => {
         supabase.removeChannel(channel);
+        supabase.removeChannel(tablesChannel);
       };
     }
   }, [restaurant]);
@@ -298,12 +362,12 @@ export default function LiveOrders() {
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
 
     try {
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from('orders')
         .update({ status: newStatus })
         .eq('id', orderId);
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       await supabase
         .from('order_status_log')
@@ -313,9 +377,37 @@ export default function LiveOrders() {
         });
 
       toast.success(`Order moved to ${newStatus}`);
+      
+      // Also refresh tables after manual order status move (so tables release when orders complete)
+      fetchTables();
     } catch (err) {
       setOrders(previousOrders);
       toast.error('Failed to update status: ' + err.message);
+    }
+  };
+
+  const getTableStatus = (table) => {
+    if (table.is_blocked) {
+      return { status: 'blocked', order: null };
+    }
+    const activeLink = orderTablesLink.find(link => link.table_id === table.id);
+    if (activeLink) {
+      return { status: 'booked', order: activeLink.orders };
+    }
+    return { status: 'available', order: null };
+  };
+
+  const toggleTableBlock = async (tableId, currentBlockedStatus) => {
+    try {
+      const { error } = await supabase
+        .from('restaurant_tables')
+        .update({ is_blocked: !currentBlockedStatus })
+        .eq('id', tableId);
+      if (error) throw error;
+      toast.success(`Table ${currentBlockedStatus ? 'unblocked' : 'blocked'}`);
+      fetchTables();
+    } catch (err) {
+      toast.error('Failed to update table: ' + err.message);
     }
   };
 
@@ -426,6 +518,72 @@ export default function LiveOrders() {
           {activeOrder ? <OrderCard order={activeOrder} onMove={moveOrder} /> : null}
         </DragOverlay>
       </DndContext>
+
+      {/* Dining Tables Layout & Live Status */}
+      <div className="mt-6 border-t border-gray-200 pt-4 flex-shrink-0 bg-white rounded-xl border p-4 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
+          <div>
+            <h3 className="font-bold text-gray-900 text-sm sm:text-base">Dining Layout & Table Bookings</h3>
+            <p className="text-xs text-gray-500">Real-time status of walk-ins and active app pre-orders</p>
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-green-500"></span> Available</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-500"></span> App Booked</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-500"></span> Offline Blocked</span>
+          </div>
+        </div>
+
+        {tables.length === 0 ? (
+          <div className="text-center py-6 text-sm text-gray-400 italic">
+            No tables configured. Add dining tables in settings to track live bookings.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3 max-h-[160px] overflow-y-auto no-scrollbar pr-1">
+            {tables.map(table => {
+              const { status, order } = getTableStatus(table);
+              return (
+                <div 
+                  key={table.id}
+                  className={`p-3 rounded-xl border text-center relative transition-all duration-200 shadow-sm ${
+                    status === 'available' ? 'bg-green-50/40 border-green-200 hover:border-green-300' :
+                    status === 'booked' ? 'bg-amber-50/40 border-amber-200 hover:border-amber-300' :
+                    'bg-red-50/40 border-red-200 hover:border-red-300'
+                  }`}
+                >
+                  <h4 className="font-bold text-gray-800 text-sm">{table.table_number}</h4>
+                  <p className="text-[10px] text-gray-500 flex items-center justify-center gap-0.5 mt-0.5">
+                    <Users className="h-2.5 w-2.5 text-brand-500" />
+                    {table.capacity} seats
+                  </p>
+
+                  {/* Status Text & Actions */}
+                  <div className="mt-2.5">
+                    {status === 'available' ? (
+                      <button
+                        onClick={() => toggleTableBlock(table.id, false)}
+                        className="w-full py-1 px-2 rounded-md bg-white border border-gray-200 text-[10px] font-bold text-gray-700 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors cursor-pointer"
+                      >
+                        Block Table
+                      </button>
+                    ) : status === 'blocked' ? (
+                      <button
+                        onClick={() => toggleTableBlock(table.id, true)}
+                        className="w-full py-1 px-2 rounded-md bg-red-600 border border-transparent text-[10px] font-bold text-white hover:bg-red-700 transition-colors cursor-pointer"
+                      >
+                        Unblock
+                      </button>
+                    ) : (
+                      <div className="text-[9px] font-bold text-amber-800 bg-amber-100/60 py-1 px-1.5 rounded-md truncate" title={`Order by ${order.customers?.name}`}>
+                        👤 {order.customers?.name || 'Customer'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
