@@ -22,6 +22,7 @@ export default function MenuManagement() {
     is_available: true
   });
   const [saving, setSaving] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
 
   useEffect(() => {
     if (restaurant) {
@@ -105,6 +106,7 @@ export default function MenuManagement() {
         is_available: true
       });
     }
+    setImageFile(null);
     setIsModalOpen(true);
   };
 
@@ -112,9 +114,51 @@ export default function MenuManagement() {
     e.preventDefault();
     setSaving(true);
     try {
+      let finalPhotoUrl = formData.photo_url;
+
+      if (imageFile) {
+        try {
+          const fileExt = imageFile.name.split('.').pop();
+          const fileName = `menu-${restaurant.id}-${Date.now()}.${fileExt}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('restaurants')
+            .upload(fileName, imageFile, {
+              cacheControl: '3600',
+              upsert: true
+            });
+            
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('restaurants')
+              .getPublicUrl(fileName);
+            finalPhotoUrl = publicUrl;
+          } else {
+            console.warn('Storage upload failed, falling back to base64:', uploadError);
+            finalPhotoUrl = await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.readAsDataURL(imageFile);
+            });
+          }
+        } catch (uploadErr) {
+          console.error('Failed to upload image:', uploadErr);
+          // Try base64 fallback directly
+          finalPhotoUrl = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(imageFile);
+          });
+        }
+      }
+
       const payload = {
-        ...formData,
+        name: formData.name,
+        category: formData.category,
         price: parseFloat(formData.price),
+        photo_url: finalPhotoUrl,
+        is_veg: formData.is_veg,
+        is_available: formData.is_available,
         restaurant_id: restaurant.id
       };
 
@@ -291,14 +335,22 @@ export default function MenuManagement() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">Photo URL (optional)</label>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Upload Item Image {!editingItem && <span className="text-red-500">*</span>}
+                  </label>
                   <input
-                    type="url"
-                    value={formData.photo_url}
-                    onChange={(e) => setFormData({...formData, photo_url: e.target.value})}
-                    className="mt-1 block w-full rounded-md border-gray-300 border py-2 px-3 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm"
-                    placeholder="https://..."
+                    type="file"
+                    accept="image/*"
+                    required={!editingItem}
+                    onChange={(e) => setImageFile(e.target.files[0])}
+                    className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100 border border-gray-300 rounded-md py-1.5 px-3"
                   />
+                  {editingItem && formData.photo_url && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <img src={formData.photo_url} alt="Current" className="h-10 w-10 object-cover rounded-md border" />
+                      <span className="text-xs text-gray-500">Current Image preview</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-6 pt-2">
