@@ -1,12 +1,12 @@
 -- ============================================================
--- SQL Migration: Setup AI Menu Card Scanner Function
+-- SQL Migration: Setup AI Menu Card Scanner Function (UPDATED)
 -- Paste this script in your Supabase SQL Editor and click RUN.
 -- ============================================================
 
 -- 1. Enable the HTTP extension (required to make API calls from Postgres)
 CREATE EXTENSION IF NOT EXISTS http WITH SCHEMA extensions;
 
--- 2. Create the secure scan function
+-- 2. Create the secure scan function (updated to use gemini-2.5-flash)
 CREATE OR REPLACE FUNCTION public.scan_menu_card(image_base64 text)
 RETURNS json
 LANGUAGE plpgsql
@@ -37,9 +37,9 @@ BEGIN
     )
   );
 
-  -- Make the HTTP request to Gemini API
+  -- Make the HTTP request to Gemini API (using gemini-2.5-flash)
   response := extensions.http_post(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' || api_key,
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' || api_key,
     payload::text,
     'application/json'
   );
