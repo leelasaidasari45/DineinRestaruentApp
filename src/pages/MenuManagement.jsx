@@ -26,6 +26,13 @@ export default function MenuManagement() {
   const [saving, setSaving] = useState(false);
   const [imageFile, setImageFile] = useState(null);
 
+  // AI Scanner state
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerImageFile, setScannerImageFile] = useState(null);
+  const [scannedItems, setScannedItems] = useState([]);
+  const [scanning, setScanning] = useState(false);
+  const [scannerStep, setScannerStep] = useState(1);
+
   useEffect(() => {
     if (restaurant) {
       fetchMenuItems();
@@ -110,6 +117,112 @@ export default function MenuManagement() {
     }
     setImageFile(null);
     setIsModalOpen(true);
+  };
+
+  const openScannerModal = () => {
+    setIsScannerOpen(true);
+    setScannerStep(1);
+    setScannerImageFile(null);
+    setScannedItems([]);
+  };
+
+  const getBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64String = reader.result.split(',')[1];
+        resolve(base64String);
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  const handleScanMenu = async (e) => {
+    e.preventDefault();
+    if (!scannerImageFile) {
+      toast.error('Please upload a menu image.');
+      return;
+    }
+    setScanning(true);
+    try {
+      const base64 = await getBase64(scannerImageFile);
+      
+      const { data, error } = await supabase.rpc('scan_menu_card', {
+        image_base64: base64
+      });
+
+      if (error) throw error;
+      
+      if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+        const text = data.candidates[0].content.parts[0].text;
+        const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        const parsed = JSON.parse(cleanedJson);
+
+        if (Array.isArray(parsed)) {
+          const itemsWithIds = parsed.map((item, idx) => ({
+            id: `scan-${Date.now()}-${idx}`,
+            name: item.name || '',
+            category: item.category || 'Main Course',
+            price: parseFloat(item.price) || 0,
+            is_veg: item.is_veg !== false,
+            selected: true
+          }));
+          setScannedItems(itemsWithIds);
+          setScannerStep(2);
+          toast.success(`Successfully parsed ${parsed.length} items!`);
+        } else {
+          throw new Error('AI response is not an array of items.');
+        }
+      } else {
+        throw new Error('AI response structure invalid.');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Scanning failed: ' + err.message);
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const handleImportScannedItems = async () => {
+    const selectedItems = scannedItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      toast.error('No items selected for import.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const payload = selectedItems.map(item => ({
+        name: item.name,
+        category: item.category,
+        price: item.price,
+        is_veg: item.is_veg,
+        is_available: true,
+        restaurant_id: restaurant.id
+      }));
+
+      const { error } = await supabase
+        .from('menu_items')
+        .insert(payload);
+
+      if (error) throw error;
+
+      toast.success(`Successfully imported ${selectedItems.length} menu items!`);
+      setIsScannerOpen(false);
+      fetchMenuItems();
+    } catch (err) {
+      toast.error('Failed to import items: ' + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateScannedItemField = (id, field, value) => {
+    setScannedItems(prev => prev.map(item => 
+      item.id === id ? { ...item, [field]: value } : item
+    ));
   };
 
   const handleSubmit = async (e) => {
@@ -218,13 +331,21 @@ export default function MenuManagement() {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Menu Management</h1>
           <p className="text-gray-500 text-sm mt-1">Manage your restaurant offerings</p>
         </div>
-        <button 
-          onClick={() => openModal()}
-          className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm"
-        >
-          <Plus className="h-4 w-4" />
-          Add Item
-        </button>
+        <div className="flex gap-3">
+          <button 
+            onClick={() => openScannerModal()}
+            className="bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+          >
+            <span>✨ AI Scanner</span>
+          </button>
+          <button 
+            onClick={() => openModal()}
+            className="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+          >
+            <Plus className="h-4 w-4" />
+            Add Item
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
@@ -479,6 +600,210 @@ export default function MenuManagement() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Menu Scanner Modal */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+            <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={() => !scanning && setIsScannerOpen(false)}></div>
+
+            <div className={`relative inline-block w-full ${scannerStep === 1 ? 'max-w-md' : 'max-w-4xl'} p-6 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl`}>
+              <h3 className="text-lg font-bold leading-6 text-gray-900 mb-2 flex items-center gap-2">
+                <span>✨ AI Menu Card Scanner</span>
+                {scannerStep === 2 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full border border-brand-200">
+                    Step 2: Review & Import
+                  </span>
+                )}
+              </h3>
+              <p className="text-xs text-gray-500 mb-6">
+                {scannerStep === 1 
+                  ? 'Upload an image of your physical menu, and Zuno\'s AI agent will automatically extract all names, prices, categories, and vegetarian classifications.'
+                  : 'Review the extracted items below. You can edit names, prices, and categories, or toggle vegetarian status before bulk-adding them to your live menu.'
+                }
+              </p>
+
+              {scannerStep === 1 ? (
+                <form onSubmit={handleScanMenu} className="space-y-4">
+                  <div className="border-2 border-dashed border-gray-300 hover:border-brand-500 rounded-xl p-8 text-center transition-colors bg-gray-50/50">
+                    <input
+                      type="file"
+                      id="scanner-image-upload"
+                      accept="image/*"
+                      required
+                      className="hidden"
+                      onChange={(e) => setScannerImageFile(e.target.files[0])}
+                    />
+                    <label htmlFor="scanner-image-upload" className="cursor-pointer block space-y-3">
+                      <div className="mx-auto h-12 w-12 text-gray-400 flex items-center justify-center bg-white rounded-full shadow-sm border border-gray-200">
+                        {scannerImageFile ? '📸' : '📁'}
+                      </div>
+                      <div className="text-sm font-semibold text-gray-700">
+                        {scannerImageFile ? scannerImageFile.name : 'Select or drag menu image'}
+                      </div>
+                      <p className="text-xs text-gray-500">Supports PNG, JPG, or JPEG formats</p>
+                    </label>
+                  </div>
+
+                  {scanning && (
+                    <div className="flex flex-col items-center justify-center p-6 bg-brand-50/50 border border-brand-100 rounded-xl space-y-3 animate-pulse">
+                      <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+                      <div className="text-sm font-bold text-brand-800">Scanning Menu Card...</div>
+                      <p className="text-xs text-brand-600 text-center">Reading text, matching prices, and categorizing dishes. This will take about 10-15 seconds.</p>
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      type="button"
+                      disabled={scanning}
+                      onClick={() => setIsScannerOpen(false)}
+                      className="bg-white border border-gray-300 rounded-md shadow-sm px-4 py-2 inline-flex justify-center text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={scanning || !scannerImageFile}
+                      className="bg-brand-600 border border-transparent rounded-md shadow-sm px-4 py-2 inline-flex justify-center text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50"
+                    >
+                      {scanning ? 'Reading Menu...' : 'Scan with AI'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-sm max-h-[400px]">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">
+                            Include
+                          </th>
+                          <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Item Name
+                          </th>
+                          <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-48">
+                            Category
+                          </th>
+                          <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">
+                            Price (₹)
+                          </th>
+                          <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">
+                            Veg?
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200 text-sm">
+                        {scannedItems.map((item) => (
+                          <tr key={item.id} className={item.selected ? 'bg-white' : 'bg-gray-50/50 opacity-60'}>
+                            <td className="px-4 py-3 whitespace-nowrap text-center">
+                              <input
+                                type="checkbox"
+                                checked={item.selected}
+                                onChange={(e) => updateScannedItemField(item.id, 'selected', e.target.checked)}
+                                className="rounded border-gray-300 text-brand-600 focus:ring-brand-500 h-4 w-4 animate-none"
+                              />
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <input
+                                type="text"
+                                required
+                                value={item.name}
+                                disabled={!item.selected}
+                                onChange={(e) => updateScannedItemField(item.id, 'name', e.target.value)}
+                                className="block w-full border border-gray-300 rounded-md py-1.5 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-xs"
+                              />
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <input
+                                type="text"
+                                required
+                                value={item.category}
+                                disabled={!item.selected}
+                                onChange={(e) => updateScannedItemField(item.id, 'category', e.target.value)}
+                                className="block w-full border border-gray-300 rounded-md py-1.5 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-xs"
+                              />
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <input
+                                type="number"
+                                required
+                                min="0"
+                                step="0.01"
+                                value={item.price}
+                                disabled={!item.selected}
+                                onChange={(e) => updateScannedItemField(item.id, 'price', e.target.value)}
+                                className="block w-full border border-gray-300 rounded-md py-1.5 px-3 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-xs"
+                              />
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <button
+                                type="button"
+                                disabled={!item.selected}
+                                onClick={() => updateScannedItemField(item.id, 'is_veg', !item.is_veg)}
+                                className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 cursor-pointer ${
+                                  item.is_veg 
+                                    ? 'bg-green-50 border-green-200 text-green-700' 
+                                    : 'bg-red-50 border-red-200 text-red-700'
+                                }`}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${item.is_veg ? 'bg-green-600' : 'bg-red-600'}`}></span>
+                                {item.is_veg ? 'Veg' : 'Non-Veg'}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-between items-center text-xs text-gray-500 pt-2">
+                    <div>
+                      Selected: <span className="font-bold text-gray-700">{scannedItems.filter(i => i.selected).length}</span> / {scannedItems.length} items
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setScannedItems(prev => prev.map(i => ({ ...i, selected: true })))}
+                        className="text-brand-600 hover:text-brand-700 font-semibold cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setScannedItems(prev => prev.map(i => ({ ...i, selected: false })))}
+                        className="text-gray-500 hover:text-gray-600 font-semibold cursor-pointer"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setScannerStep(1)}
+                      className="bg-white border border-gray-300 rounded-md shadow-sm px-4 py-2 inline-flex justify-center text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      disabled={saving || scannedItems.filter(i => i.selected).length === 0}
+                      onClick={handleImportScannedItems}
+                      className="bg-brand-600 border border-transparent rounded-md shadow-sm px-5 py-2 inline-flex justify-center text-sm font-semibold text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50 cursor-pointer"
+                    >
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Import Selected Items
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
