@@ -48,7 +48,8 @@ export default function PastOrders() {
   const filteredOrders = orders.filter(order => {
     const matchesSearch = 
       (order.customers?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.id.toLowerCase().includes(searchTerm.toLowerCase());
+      order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.order_code || '').toLowerCase().includes(searchTerm.toLowerCase());
       
     const matchesStatus = statusFilter === 'all' ? true : order.status === statusFilter;
     
@@ -130,7 +131,7 @@ export default function PastOrders() {
                     <div className="text-sm text-gray-500 flex flex-wrap gap-x-6 gap-y-1">
                       <span className="flex items-center gap-1"><Phone className="h-4 w-4" /> {order.customers?.phone || 'No Phone'}</span>
                       <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> Arrived: {format(parseISO(order.arrival_time), 'PPp')}</span>
-                      <span>ID: #{order.id.substring(0, 8)}</span>
+                      <span>ID: {order.order_code || `#${order.id.substring(0, 8)}`}</span>
                     </div>
 
                     <div className="mt-3 pt-3 border-t border-gray-100">

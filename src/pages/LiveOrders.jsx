@@ -70,7 +70,9 @@ function OrderCardContent({ order, onMove, nextAction, isUrgent, timeColor, isOv
       </div>
 
       <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
-        <span className="text-xs font-medium text-gray-500">ID: #{order.id.substring(0,6)}</span>
+        <span className="text-xs font-semibold text-gray-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
+          {order.order_code || `ID: #${order.id.substring(0,6)}`}
+        </span>
         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${order.payment_status === 'paid' || order.advance_paid_amount > 0 ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-600'}`}>
           {order.advance_paid_amount > 0 ? `₹${order.advance_paid_amount} Advance` : 'Pending'}
         </span>
