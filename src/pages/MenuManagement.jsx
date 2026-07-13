@@ -28,10 +28,11 @@ export default function MenuManagement() {
 
   // AI Scanner state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerImageFile, setScannerImageFile] = useState(null);
+  const [scannerImageFiles, setScannerImageFiles] = useState([]);
   const [scannedItems, setScannedItems] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [scannerStep, setScannerStep] = useState(1);
+  const [scanProgressMessage, setScanProgressMessage] = useState('');
 
   useEffect(() => {
     if (restaurant) {
@@ -145,8 +146,9 @@ export default function MenuManagement() {
   const openScannerModal = () => {
     setIsScannerOpen(true);
     setScannerStep(1);
-    setScannerImageFile(null);
+    setScannerImageFiles([]);
     setScannedItems([]);
+    setScanProgressMessage('');
   };
 
   const getBase64 = (file) => {
@@ -163,48 +165,62 @@ export default function MenuManagement() {
 
   const handleScanMenu = async (e) => {
     e.preventDefault();
-    if (!scannerImageFile) {
-      toast.error('Please upload a menu image.');
+    if (scannerImageFiles.length === 0) {
+      toast.error('Please upload at least one menu image.');
       return;
     }
     setScanning(true);
+    const allExtractedItems = [];
+    
     try {
-      const base64 = await getBase64(scannerImageFile);
-      
-      const { data, error } = await supabase.rpc('scan_menu_card', {
-        image_base64: base64
-      });
+      for (let i = 0; i < scannerImageFiles.length; i++) {
+        const file = scannerImageFiles[i];
+        setScanProgressMessage(`Scanning page ${i + 1} of ${scannerImageFiles.length}...`);
+        
+        const base64 = await getBase64(file);
+        
+        const { data, error } = await supabase.rpc('scan_menu_card', {
+          image_base64: base64
+        });
 
-      if (error) throw error;
-      
-      if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-        const text = data.candidates[0].content.parts[0].text;
-        const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        const parsed = JSON.parse(cleanedJson);
+        if (error) throw error;
+        
+        if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+          const text = data.candidates[0].content.parts[0].text;
+          const cleanedJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const parsed = JSON.parse(cleanedJson);
 
-        if (Array.isArray(parsed)) {
-          const itemsWithIds = parsed.map((item, idx) => ({
-            id: `scan-${Date.now()}-${idx}`,
-            name: item.name || '',
-            category: item.category || 'Main Course',
-            price: parseFloat(item.price) || 0,
-            is_veg: item.is_veg !== false,
-            selected: true
-          }));
-          setScannedItems(itemsWithIds);
-          setScannerStep(2);
-          toast.success(`Successfully parsed ${parsed.length} items!`);
+          if (Array.isArray(parsed)) {
+            allExtractedItems.push(...parsed);
+          } else {
+            console.warn(`AI response for page ${i + 1} was not a valid array.`);
+          }
         } else {
-          throw new Error('AI response is not an array of items.');
+          throw new Error(`AI response structure invalid for page ${i + 1}.`);
         }
+      }
+
+      if (allExtractedItems.length > 0) {
+        const itemsWithIds = allExtractedItems.map((item, idx) => ({
+          id: `scan-${Date.now()}-${idx}`,
+          name: item.name || '',
+          category: item.category || 'Main Course',
+          price: parseFloat(item.price) || 0,
+          is_veg: item.is_veg !== false,
+          selected: true
+        }));
+        setScannedItems(itemsWithIds);
+        setScannerStep(2);
+        toast.success(`Successfully scanned ${scannerImageFiles.length} pages and parsed ${allExtractedItems.length} items!`);
       } else {
-        throw new Error('AI response structure invalid.');
+        throw new Error('No items could be parsed from the uploaded images.');
       }
     } catch (err) {
       console.error(err);
       toast.error('Scanning failed: ' + err.message);
     } finally {
       setScanning(false);
+      setScanProgressMessage('');
     }
   };
 
@@ -666,26 +682,56 @@ export default function MenuManagement() {
                       type="file"
                       id="scanner-image-upload"
                       accept="image/*"
-                      required
+                      multiple
                       className="hidden"
-                      onChange={(e) => setScannerImageFile(e.target.files[0])}
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+                        setScannerImageFiles(prev => [...prev, ...files]);
+                      }}
                     />
                     <label htmlFor="scanner-image-upload" className="cursor-pointer block space-y-3">
                       <div className="mx-auto h-12 w-12 text-gray-400 flex items-center justify-center bg-white rounded-full shadow-sm border border-gray-200">
-                        {scannerImageFile ? '📸' : '📁'}
+                        📁
                       </div>
                       <div className="text-sm font-semibold text-gray-700">
-                        {scannerImageFile ? scannerImageFile.name : 'Select or drag menu image'}
+                        Select or drag menu images
                       </div>
-                      <p className="text-xs text-gray-500">Supports PNG, JPG, or JPEG formats</p>
+                      <p className="text-xs text-gray-500">Supports uploading multiple pages (PNG, JPG, JPEG)</p>
                     </label>
                   </div>
+
+                  {/* Selected files list */}
+                  {scannerImageFiles.length > 0 && (
+                    <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        Selected Files ({scannerImageFiles.length})
+                      </div>
+                      {scannerImageFiles.map((file, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-gray-400">📄</span>
+                            <span className="font-medium text-gray-700 truncate" title={file.name}>{file.name}</span>
+                            <span className="text-gray-400">({(file.size / 1024).toFixed(0)} KB)</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setScannerImageFiles(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {scanning && (
                     <div className="flex flex-col items-center justify-center p-6 bg-brand-50/50 border border-brand-100 rounded-xl space-y-3 animate-pulse">
                       <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
-                      <div className="text-sm font-bold text-brand-800">Scanning Menu Card...</div>
-                      <p className="text-xs text-brand-600 text-center">Reading text, matching prices, and categorizing dishes. This will take about 10-15 seconds.</p>
+                      <div className="text-sm font-bold text-brand-800">
+                        {scanProgressMessage || 'Scanning Menu Card...'}
+                      </div>
+                      <p className="text-xs text-brand-600 text-center">Reading text, matching prices, and categorizing dishes. Scanning multiple pages sequentially.</p>
                     </div>
                   )}
 
@@ -700,7 +746,7 @@ export default function MenuManagement() {
                     </button>
                     <button
                       type="submit"
-                      disabled={scanning || !scannerImageFile}
+                      disabled={scanning || scannerImageFiles.length === 0}
                       className="bg-brand-600 border border-transparent rounded-md shadow-sm px-4 py-2 inline-flex justify-center text-sm font-medium text-white hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-500 disabled:opacity-50"
                     >
                       {scanning ? 'Reading Menu...' : 'Scan with AI'}
