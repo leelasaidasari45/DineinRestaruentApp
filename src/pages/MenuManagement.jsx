@@ -520,7 +520,7 @@ export default function MenuManagement() {
             <div className="space-y-8">
               {sortedCategories.map((categoryName, idx) => (
                 <div key={categoryName} className="space-y-4">
-                  {idx > 0 && <hr className="border-t border-gray-300 my-8" />}
+                  {idx > 0 && <hr className="border-t-2 border-gray-400/60 my-12" />}
                   <h2 className="text-base font-bold text-gray-800 border-b border-gray-300 pb-2 flex items-center gap-2">
                     <span className="bg-brand-100 text-brand-800 text-xs px-2 py-0.5 rounded-full font-semibold">
                       {groupedItems[categoryName].length}
