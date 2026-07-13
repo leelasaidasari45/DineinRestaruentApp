@@ -10,6 +10,7 @@ export default function MenuManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [vegFilter, setVegFilter] = useState('all'); // 'all', 'veg', 'non-veg'
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -193,7 +194,10 @@ export default function MenuManagement() {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
       item.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesVeg = vegFilter === 'all' || 
+      (vegFilter === 'veg' && item.is_veg) || 
+      (vegFilter === 'non-veg' && !item.is_veg);
+    return matchesSearch && matchesCategory && matchesVeg;
   });
 
   const groupedItems = filteredItems.reduce((acc, item) => {
@@ -225,8 +229,8 @@ export default function MenuManagement() {
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
         <div className="p-4 border-b border-gray-200 flex flex-col gap-3 bg-gray-50/50">
-          <div className="flex justify-between items-center">
-            <div className="relative w-64">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="relative w-full sm:w-64">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-4 w-4 text-gray-400" />
               </div>
@@ -237,6 +241,42 @@ export default function MenuManagement() {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm transition-colors"
               />
+            </div>
+
+            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 self-start sm:self-auto flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setVegFilter('all')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                  vegFilter === 'all' 
+                    ? 'bg-white text-gray-900 shadow-sm font-bold' 
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                onClick={() => setVegFilter('veg')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                  vegFilter === 'veg' 
+                    ? 'bg-white text-green-700 shadow-sm font-bold' 
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full bg-green-600"></span> Veg
+              </button>
+              <button
+                type="button"
+                onClick={() => setVegFilter('non-veg')}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                  vegFilter === 'non-veg' 
+                    ? 'bg-white text-red-700 shadow-sm font-bold' 
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full bg-red-600"></span> Non-Veg
+              </button>
             </div>
           </div>
           
