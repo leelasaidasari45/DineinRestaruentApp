@@ -1,16 +1,18 @@
 -- ============================================================
--- SQL Migration: Setup AI Menu Card Scanner Function (UPDATED)
+-- SQL Migration: Setup AI Menu Card Scanner Function (UPDATED TIMEOUT)
 -- Paste this script in your Supabase SQL Editor and click RUN.
 -- ============================================================
 
 -- 1. Enable the HTTP extension (required to make API calls from Postgres)
 CREATE EXTENSION IF NOT EXISTS http WITH SCHEMA extensions;
 
--- 2. Create the secure scan function (updated to use gemini-3.5-flash)
+-- 2. Create the secure scan function (updated model and timeout config)
 CREATE OR REPLACE FUNCTION public.scan_menu_card(image_base64 text)
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET http.curlopt_timeout_ms = 30000
+SET http.curlopt_connecttimeout_ms = 10000
 AS $$
 DECLARE
   api_key text := 'YOUR_GEMINI_API_KEY_HERE'; -- REPLACE THIS WITH YOUR GEMINI API KEY
