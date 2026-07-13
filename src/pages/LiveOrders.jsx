@@ -29,6 +29,69 @@ const COLUMNS = [
   { id: 'completed', title: 'Completed' },
 ];
 
+function OrderCardContent({ order, onMove, nextAction, isUrgent, timeColor, isOverdue, minutesUntilArrival, arrivalTime }) {
+  const action = nextAction;
+  return (
+    <div className={`bg-white rounded-lg shadow-sm border ${isUrgent ? 'border-red-400' : 'border-gray-200'} p-4 mb-3 hover:shadow-md transition-shadow relative overflow-hidden`}>
+      <div className="flex justify-between items-start mb-2">
+        <div>
+          <h4 className="font-bold text-gray-900 text-lg">
+            {order.customers?.name || 'Unknown Customer'}
+          </h4>
+          <p className="text-sm text-gray-500 flex items-center gap-1">
+            <Phone className="h-3 w-3" />
+            {order.customers?.phone || 'No phone'}
+          </p>
+        </div>
+        {order.status === 'completed' ? (
+          <div className="text-xs font-bold px-2 py-1 rounded-md border text-green-700 bg-green-50 border-green-200 font-sans">
+            Completed
+          </div>
+        ) : (
+          <div className={`text-xs font-bold px-2 py-1 rounded-md border flex items-center gap-1 font-sans ${timeColor}`}>
+            <Clock className="h-3 w-3" />
+            {isOverdue ? `Overdue by ${Math.abs(minutesUntilArrival)}m` : `In ${minutesUntilArrival}m`}
+          </div>
+        )}
+      </div>
+      
+      <div className="text-sm text-gray-500 mb-2">
+        Due: {format(arrivalTime, 'h:mm a')}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
+        {order.order_items?.map((item) => (
+          <div key={item.id} className="flex justify-between text-sm">
+            <span className="text-gray-800">
+              <span className="font-semibold">{item.quantity}x</span> {item.menu_items?.name || 'Item'}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
+        <span className="text-xs font-medium text-gray-500">ID: #{order.id.substring(0,6)}</span>
+        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${order.payment_status === 'paid' || order.advance_paid_amount > 0 ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-600'}`}>
+          {order.advance_paid_amount > 0 ? `₹${order.advance_paid_amount} Advance` : 'Pending'}
+        </span>
+      </div>
+
+      {action && (
+        <button
+          onPointerDown={(e) => e.stopPropagation()} // Crucial to prevent dnd-kit from starting a drag
+          onClick={(e) => {
+            e.stopPropagation();
+            onMove(order.id, action.target);
+          }}
+          className={`mt-4 w-full py-2 px-3 rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center justify-center gap-1 cursor-pointer ${action.color}`}
+        >
+          {action.label} <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function OrderCard({ order, onMove }) {
   const {
     attributes,
@@ -78,63 +141,18 @@ function OrderCard({ order, onMove }) {
       style={style}
       {...attributes}
       {...listeners}
-      className={`bg-white rounded-lg shadow-sm border ${isUrgent ? 'border-red-400' : 'border-gray-200'} p-4 mb-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow relative overflow-hidden`}
+      className="outline-none cursor-grab active:cursor-grabbing mb-3"
     >
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <h4 className="font-bold text-gray-900 text-lg">
-            {order.customers?.name || 'Unknown Customer'}
-          </h4>
-          <p className="text-sm text-gray-500 flex items-center gap-1">
-            <Phone className="h-3 w-3" />
-            {order.customers?.phone || 'No phone'}
-          </p>
-        </div>
-        {order.status === 'completed' ? (
-          <div className="text-xs font-bold px-2 py-1 rounded-md border text-green-700 bg-green-50 border-green-200">
-            Completed
-          </div>
-        ) : (
-          <div className={`text-xs font-bold px-2 py-1 rounded-md border flex items-center gap-1 ${timeColor}`}>
-            <Clock className="h-3 w-3" />
-            {isOverdue ? `Overdue by ${Math.abs(minutesUntilArrival)}m` : `In ${minutesUntilArrival}m`}
-          </div>
-        )}
-      </div>
-      
-      <div className="text-sm text-gray-500 mb-2">
-        Due: {format(arrivalTime, 'h:mm a')}
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-gray-100 space-y-1">
-        {order.order_items?.map((item) => (
-          <div key={item.id} className="flex justify-between text-sm">
-            <span className="text-gray-800">
-              <span className="font-semibold">{item.quantity}x</span> {item.menu_items?.name || 'Item'}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between items-center">
-        <span className="text-xs font-medium text-gray-500">ID: #{order.id.substring(0,6)}</span>
-        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${order.payment_status === 'paid' || order.advance_paid_amount > 0 ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-600'}`}>
-          {order.advance_paid_amount > 0 ? `₹${order.advance_paid_amount} Advance` : 'Pending'}
-        </span>
-      </div>
-
-      {action && (
-        <button
-          onPointerDown={(e) => e.stopPropagation()} // Crucial to prevent dnd-kit from starting a drag
-          onClick={(e) => {
-            e.stopPropagation();
-            onMove(order.id, action.target);
-          }}
-          className={`mt-4 w-full py-2 px-3 rounded-lg text-xs font-semibold shadow-sm transition-colors flex items-center justify-center gap-1 cursor-pointer ${action.color}`}
-        >
-          {action.label} <ArrowRight className="h-3.5 w-3.5" />
-        </button>
-      )}
+      <OrderCardContent
+        order={order}
+        onMove={onMove}
+        nextAction={action}
+        isUrgent={isUrgent}
+        timeColor={timeColor}
+        isOverdue={isOverdue}
+        minutesUntilArrival={minutesUntilArrival}
+        arrivalTime={arrivalTime}
+      />
     </div>
   );
 }
@@ -515,7 +533,20 @@ export default function LiveOrders() {
         </div>
 
         <DragOverlay>
-          {activeOrder ? <OrderCard order={activeOrder} onMove={moveOrder} /> : null}
+          {activeOrder ? (
+            <div className="w-[320px] select-none opacity-90 pointer-events-none rotate-1 shadow-lg">
+              <OrderCardContent
+                order={activeOrder}
+                onMove={() => {}}
+                nextAction={null}
+                isUrgent={activeOrder.status === 'confirmed' && differenceInMinutes(parseISO(activeOrder.arrival_time), new Date()) <= 10 && differenceInMinutes(parseISO(activeOrder.arrival_time), new Date()) > -60}
+                timeColor="text-gray-500 bg-gray-50 border-gray-200"
+                isOverdue={differenceInMinutes(parseISO(activeOrder.arrival_time), new Date()) < 0}
+                minutesUntilArrival={differenceInMinutes(parseISO(activeOrder.arrival_time), new Date())}
+                arrivalTime={parseISO(activeOrder.arrival_time)}
+              />
+            </div>
+          ) : null}
         </DragOverlay>
       </DndContext>
 
