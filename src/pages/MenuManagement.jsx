@@ -93,6 +93,29 @@ export default function MenuManagement() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    if (!confirm('Are you sure you want to delete all menu items? This action is permanent and cannot be undone.')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('menu_items')
+        .delete()
+        .eq('restaurant_id', restaurant.id);
+        
+      if (error) throw error;
+      
+      setItems([]);
+      toast.success('All menu items deleted successfully');
+    } catch (err) {
+      toast.error('Failed to delete all items: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const openModal = (item = null) => {
     if (item) {
       setEditingItem(item);
@@ -332,6 +355,15 @@ export default function MenuManagement() {
           <p className="text-gray-500 text-sm mt-1">Manage your restaurant offerings</p>
         </div>
         <div className="flex gap-3">
+          {items.length > 0 && (
+            <button 
+              onClick={handleDeleteAll}
+              className="bg-red-50 border border-red-200 text-red-700 hover:bg-red-100 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete All
+            </button>
+          )}
           <button 
             onClick={() => openScannerModal()}
             className="bg-brand-50 border border-brand-200 text-brand-700 hover:bg-brand-100 px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-sm cursor-pointer"
