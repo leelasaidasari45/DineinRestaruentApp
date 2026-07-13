@@ -173,17 +173,56 @@ export default function MenuManagement() {
     const allExtractedItems = [];
     
     try {
+      // 1. Fetch the shared API key from the database configuration
+      const { data: configData, error: configError } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'gemini_api_key')
+        .single();
+
+      if (configError) {
+        throw new Error('Failed to load API config: ' + configError.message);
+      }
+
+      const apiKey = configData.value;
+
+      // 2. Loop and scan pages directly from client side
       for (let i = 0; i < scannerImageFiles.length; i++) {
         const file = scannerImageFiles[i];
         setScanProgressMessage(`Scanning page ${i + 1} of ${scannerImageFiles.length}...`);
         
         const base64 = await getBase64(file);
         
-        const { data, error } = await supabase.rpc('scan_menu_card', {
-          image_base64: base64
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: 'Analyze this menu card image and extract all food items. For each item, extract the name, category (e.g. Starter, Main Course, Biryani, Soups, Dessert, Beverage, Tiffin, Bread), price (numeric value only, omit currency symbols), and whether it is vegetarian (true/false) based on standard ingredients or indicators (like green dot/red dot). Return the result as a raw JSON array of objects with the keys: name, category, price, is_veg. Return ONLY the raw JSON array. Do not include markdown code block formatting (like ```json ... ```) or any other conversational text.'
+                  },
+                  {
+                    inlineData: {
+                      mimeType: file.type || 'image/jpeg',
+                      data: base64
+                    }
+                  }
+                ]
+              }
+            ]
+          })
         });
 
-        if (error) throw error;
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error?.message || `API call returned status ${response.status}`);
+        }
+
+        const data = await response.json();
         
         if (data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
           const text = data.candidates[0].content.parts[0].text;
