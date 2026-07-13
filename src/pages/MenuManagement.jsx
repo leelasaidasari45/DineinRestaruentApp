@@ -9,6 +9,7 @@ export default function MenuManagement() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('All');
   
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -186,10 +187,25 @@ export default function MenuManagement() {
     }
   };
 
-  const filteredItems = items.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    item.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const categories = ['All', ...new Set(items.map(item => item.category).filter(Boolean))];
+
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      item.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = selectedCategory === 'All' || item.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const groupedItems = filteredItems.reduce((acc, item) => {
+    const cat = item.category || 'Uncategorized';
+    if (!acc[cat]) {
+      acc[cat] = [];
+    }
+    acc[cat].push(item);
+    return acc;
+  }, {});
+
+  const sortedCategories = Object.keys(groupedItems).sort();
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6 overflow-hidden">
@@ -208,19 +224,39 @@ export default function MenuManagement() {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
-          <div className="relative w-64">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search className="h-4 w-4 text-gray-400" />
+        <div className="p-4 border-b border-gray-200 flex flex-col gap-3 bg-gray-50/50">
+          <div className="flex justify-between items-center">
+            <div className="relative w-64">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search items..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm transition-colors"
+              />
             </div>
-            <input
-              type="text"
-              placeholder="Search items..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-brand-500 focus:border-brand-500 sm:text-sm transition-colors"
-            />
           </div>
+          
+          {categories.length > 1 && (
+            <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar scroll-smooth">
+              {categories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all border ${
+                    selectedCategory === cat 
+                      ? 'bg-brand-600 border-brand-600 text-white shadow-sm' 
+                      : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
@@ -233,50 +269,61 @@ export default function MenuManagement() {
               <p>No menu items found.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredItems.map(item => (
-                <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white flex flex-col">
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`h-3 w-3 rounded-sm border ${item.is_veg ? 'border-green-600 bg-green-100' : 'border-red-600 bg-red-100'} flex-shrink-0`}>
-                          <span className={`block w-1.5 h-1.5 m-auto mt-[2px] rounded-full ${item.is_veg ? 'bg-green-600' : 'bg-red-600'}`}></span>
-                        </span>
-                        <h3 className="font-semibold text-gray-900 truncate" title={item.name}>{item.name}</h3>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{item.category}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="text-lg font-bold text-gray-900 mb-4">
-                    ₹{item.price}
-                  </div>
+            <div className="space-y-8">
+              {sortedCategories.map(categoryName => (
+                <div key={categoryName} className="space-y-4">
+                  <h2 className="text-base font-bold text-gray-800 border-b border-gray-100 pb-2 flex items-center gap-2">
+                    <span className="bg-brand-100 text-brand-800 text-xs px-2 py-0.5 rounded-full font-semibold">
+                      {groupedItems[categoryName].length}
+                    </span>
+                    {categoryName}
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {groupedItems[categoryName].map(item => (
+                      <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white flex flex-col">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-3 w-3 rounded-sm border ${item.is_veg ? 'border-green-600 bg-green-100' : 'border-red-600 bg-red-100'} flex-shrink-0`}>
+                                <span className={`block w-1.5 h-1.5 m-auto mt-[2px] rounded-full ${item.is_veg ? 'bg-green-600' : 'bg-red-600'}`}></span>
+                              </span>
+                              <h3 className="font-semibold text-gray-900 truncate" title={item.name}>{item.name}</h3>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="text-lg font-bold text-gray-900 mb-4">
+                          ₹{item.price}
+                        </div>
 
-                  <div className="mt-auto space-y-3 pt-3 border-t border-gray-100">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Available</span>
-                      <button 
-                        onClick={() => handleToggle(item.id, 'is_available', item.is_available)}
-                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${item.is_available ? 'bg-brand-500' : 'bg-gray-200'}`}
-                      >
-                        <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${item.is_available ? 'translate-x-4' : 'translate-x-0'}`} />
-                      </button>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={() => openModal(item)}
-                        className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-1.5 rounded text-sm font-medium transition-colors border border-gray-200 flex justify-center items-center gap-1"
-                      >
-                        <Edit2 className="h-3 w-3" /> Edit
-                      </button>
-                      <button 
-                        onClick={() => handleDelete(item.id)}
-                        className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-1.5 rounded text-sm font-medium transition-colors border border-red-200 flex justify-center items-center gap-1"
-                      >
-                        <Trash2 className="h-3 w-3" /> Delete
-                      </button>
-                    </div>
+                        <div className="mt-auto space-y-3 pt-3 border-t border-gray-100">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Available</span>
+                            <button 
+                              onClick={() => handleToggle(item.id, 'is_available', item.is_available)}
+                              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${item.is_available ? 'bg-brand-500' : 'bg-gray-200'}`}
+                            >
+                              <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${item.is_available ? 'translate-x-4' : 'translate-x-0'}`} />
+                            </button>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => openModal(item)}
+                              className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 py-1.5 rounded text-sm font-medium transition-colors border border-gray-200 flex justify-center items-center gap-1"
+                            >
+                              <Edit2 className="h-3 w-3" /> Edit
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(item.id)}
+                              className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 py-1.5 rounded text-sm font-medium transition-colors border border-red-200 flex justify-center items-center gap-1"
+                            >
+                              <Trash2 className="h-3 w-3" /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
