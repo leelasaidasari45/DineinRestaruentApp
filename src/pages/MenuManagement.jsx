@@ -531,12 +531,12 @@ export default function MenuManagement() {
                     {groupedItems[categoryName].map(item => (
                       <div key={item.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white flex flex-col">
                         <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
                               <span className={`h-3 w-3 rounded-sm border ${item.is_veg ? 'border-green-600 bg-green-100' : 'border-red-600 bg-red-100'} flex-shrink-0`}>
                                 <span className={`block w-1.5 h-1.5 m-auto mt-[2px] rounded-full ${item.is_veg ? 'bg-green-600' : 'bg-red-600'}`}></span>
                               </span>
-                              <h3 className="font-semibold text-gray-900 truncate" title={item.name}>{item.name}</h3>
+                              <h3 className="font-semibold text-gray-900 break-words whitespace-normal text-sm sm:text-base flex-1" title={item.name}>{item.name}</h3>
                             </div>
                           </div>
                         </div>
