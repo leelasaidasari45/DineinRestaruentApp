@@ -404,12 +404,12 @@ export default function MenuManagement() {
 
   return (
     <div className="h-full flex flex-col p-4 md:p-6 overflow-hidden">
-      <div className="mb-6 flex justify-between items-center">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Menu Management</h1>
           <p className="text-gray-500 text-sm mt-1">Manage your restaurant offerings</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 md:gap-3">
           {items.length > 0 && (
             <button 
               onClick={handleDeleteAll}
