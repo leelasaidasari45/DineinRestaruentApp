@@ -23,7 +23,7 @@ export default function Layout() {
           <div className="bg-brand-500 rounded-full p-1.5">
             <ChefHat className="h-4.5 w-4.5 text-white" />
           </div>
-          <span className="font-bold text-lg text-gray-900 tracking-tight">Zuno For Restaurant</span>
+          <span className="font-bold text-lg text-gray-900 tracking-tight">zunoindia For Restaurant</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-full max-w-[120px] truncate">
@@ -45,7 +45,7 @@ export default function Layout() {
           <div className="bg-brand-500 rounded-full p-2">
             <ChefHat className="h-5 w-5 text-white" />
           </div>
-          <span className="font-bold text-xl text-gray-900 tracking-tight">Zuno For Restaurant</span>
+          <span className="font-bold text-xl text-gray-900 tracking-tight">zunoindia For Restaurant</span>
         </div>
         
         <div className="flex-1 py-6 flex flex-col gap-1 px-4 overflow-y-auto">

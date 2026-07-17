@@ -710,7 +710,7 @@ export default function MenuManagement() {
               </h3>
               <p className="text-xs text-gray-500 mb-6">
                 {scannerStep === 1 
-                  ? 'Upload an image of your physical menu, and Zuno\'s AI agent will automatically extract all names, prices, categories, and vegetarian classifications.'
+                  ? 'Upload an image of your physical menu, and zunoindia\'s AI agent will automatically extract all names, prices, categories, and vegetarian classifications.'
                   : 'Review the extracted items below. You can edit names, prices, and categories, or toggle vegetarian status before bulk-adding them to your live menu.'
                 }
               </p>
